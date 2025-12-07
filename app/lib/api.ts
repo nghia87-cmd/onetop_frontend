@@ -1,169 +1,169 @@
+// Client-side API client for Remix
+// NOTE: In Remix, prefer using useFetcher/useActionData instead of direct API calls
+// This file is only for special cases (e.g., real-time features, client-side mutations)
+
 import axios from 'axios';
 
-const API_BASE_URL = process.env.NODE_ENV === 'production' 
-  ? 'https://api.onetop.com' 
+const API_BASE_URL = typeof window !== 'undefined'
+  ? window.ENV?.API_URL || 'http://localhost:8000'
   : 'http://localhost:8000';
 
+/**
+ * Client API instance - Uses cookies for authentication
+ * NO localStorage! Cookies are automatically sent with withCredentials: true
+ */
 export const api = axios.create({
   baseURL: API_BASE_URL,
   headers: {
     'Content-Type': 'application/json',
   },
-  withCredentials: true,
+  withCredentials: true, // Send cookies automatically
 });
 
-// Request interceptor for adding auth token
-api.interceptors.request.use(
-  (config) => {
-    const token = localStorage.getItem('access_token');
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
-    }
-    return config;
-  },
-  (error) => Promise.reject(error)
-);
-
-// Response interceptor for handling token refresh
+// Simple response interceptor for error handling
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
-    const originalRequest = error.config;
-
-    if (error.response?.status === 401 && !originalRequest._retry) {
-      originalRequest._retry = true;
-
-      try {
-        const refreshToken = localStorage.getItem('refresh_token');
-        const response = await axios.post(`${API_BASE_URL}/api/v1/auth/token/refresh/`, {
-          refresh: refreshToken,
-        });
-
-        const { access } = response.data;
-        localStorage.setItem('access_token', access);
-
-        originalRequest.headers.Authorization = `Bearer ${access}`;
-        return api(originalRequest);
-      } catch (refreshError) {
-        localStorage.removeItem('access_token');
-        localStorage.removeItem('refresh_token');
-        window.location.href = '/login';
-        return Promise.reject(refreshError);
-      }
+    // If 401, redirect to login (session expired)
+    if (error.response?.status === 401) {
+      window.location.href = '/login';
+      return Promise.reject(error);
     }
-
     return Promise.reject(error);
   }
 );
 
-// API Services
+/**
+ * Auth API (Client-side - for login/register forms only)
+ * These methods return data to be handled by Remix actions
+ */
 export const authAPI = {
-  login: (email: string, password: string) =>
-    api.post('/api/v1/auth/login/', { email, password }),
-  
-  register: (data: any) =>
-    api.post('/api/v1/auth/register/', data),
-  
-  logout: () =>
-    api.post('/api/v1/auth/logout/'),
-  
-  getProfile: () =>
-    api.get('/api/v1/auth/me/'),
+  login: async (email: string, password: string) => {
+    return api.post('/api/v1/auth/login/', { email, password });
+  },
+
+  register: async (data: any) => {
+    return api.post('/api/v1/auth/register/', data);
+  },
+
+  logout: async () => {
+    return api.post('/api/v1/auth/logout/');
+  },
+
+  me: async () => {
+    return api.get('/api/v1/auth/me/');
+  },
 };
 
+/**
+ * Jobs API (Client-side - prefer using useFetcher instead)
+ */
 export const jobsAPI = {
-  list: (params?: any) =>
-    api.get('/api/v1/jobs/', { params }),
-  
-  get: (id: string) =>
-    api.get(`/api/v1/jobs/${id}/`),
-  
-  create: (data: any) =>
-    api.post('/api/v1/jobs/', data),
-  
-  update: (id: string, data: any) =>
-    api.put(`/api/v1/jobs/${id}/`, data),
-  
-  delete: (id: string) =>
-    api.delete(`/api/v1/jobs/${id}/`),
-  
-  search: (query: string, filters?: any) =>
-    api.get('/api/v1/jobs/search/', { params: { q: query, ...filters } }),
+  list: async (params?: any) => {
+    return api.get('/api/v1/jobs/', { params });
+  },
+
+  get: async (id: string) => {
+    return api.get(`/api/v1/jobs/${id}/`);
+  },
+
+  search: async (query: string, filters?: any) => {
+    return api.get('/api/v1/jobs/search/', {
+      params: { q: query, ...filters },
+    });
+  },
 };
 
+/**
+ * Applications API (Client-side)
+ */
 export const applicationsAPI = {
-  list: () =>
-    api.get('/api/v1/applications/'),
-  
-  create: (data: any) =>
-    api.post('/api/v1/applications/', data),
-  
-  get: (id: string) =>
-    api.get(`/api/v1/applications/${id}/`),
-  
-  updateStatus: (id: string, status: string) =>
-    api.patch(`/api/v1/applications/${id}/`, { status }),
-  
-  downloadCV: (id: string) =>
-    api.get(`/api/v1/media/application/${id}/download/`, {
-      responseType: 'blob',
-    }),
+  create: async (data: any) => {
+    return api.post('/api/v1/applications/', data);
+  },
+
+  list: async () => {
+    return api.get('/api/v1/applications/');
+  },
+
+  get: async (id: string) => {
+    return api.get(`/api/v1/applications/${id}/`);
+  },
+
+  update: async (id: string, data: any) => {
+    return api.patch(`/api/v1/applications/${id}/`, data);
+  },
+
+  withdraw: async (id: string) => {
+    return api.post(`/api/v1/applications/${id}/withdraw/`);
+  },
 };
 
-export const resumeAPI = {
-  list: () =>
-    api.get('/api/v1/resumes/'),
-  
-  create: (formData: FormData) =>
-    api.post('/api/v1/resumes/', formData, {
+/**
+ * Resumes API (Client-side)
+ */
+export const resumesAPI = {
+  list: async () => {
+    return api.get('/api/v1/resumes/');
+  },
+
+  get: async (id: string) => {
+    return api.get(`/api/v1/resumes/${id}/`);
+  },
+
+  create: async (data: FormData) => {
+    return api.post('/api/v1/resumes/', data, {
       headers: { 'Content-Type': 'multipart/form-data' },
-    }),
-  
-  get: (id: string) =>
-    api.get(`/api/v1/resumes/${id}/`),
-  
-  update: (id: string, formData: FormData) =>
-    api.put(`/api/v1/resumes/${id}/`, formData, {
+    });
+  },
+
+  update: async (id: string, data: FormData) => {
+    return api.patch(`/api/v1/resumes/${id}/`, data, {
       headers: { 'Content-Type': 'multipart/form-data' },
-    }),
-  
-  delete: (id: string) =>
-    api.delete(`/api/v1/resumes/${id}/`),
-  
-  download: (id: string) =>
-    api.get(`/api/v1/media/resume/${id}/download/`, {
-      responseType: 'blob',
-    }),
+    });
+  },
+
+  delete: async (id: string) => {
+    return api.delete(`/api/v1/resumes/${id}/`);
+  },
+
+  download: (id: string) => {
+    return `${API_BASE_URL}/api/v1/resumes/${id}/download/`;
+  },
 };
 
-export const companiesAPI = {
-  list: (params?: any) =>
-    api.get('/api/v1/companies/', { params }),
-  
-  get: (id: string) =>
-    api.get(`/api/v1/companies/${id}/`),
-};
+/**
+ * Chats API (Client-side)
+ */
+export const chatsAPI = {
+  listConversations: async () => {
+    return api.get('/api/v1/chats/conversations/');
+  },
 
-export const chatAPI = {
-  getConversations: () =>
-    api.get('/api/v1/chats/conversations/'),
-  
-  getMessages: (conversationId: string) =>
-    api.get(`/api/v1/chats/conversations/${conversationId}/messages/`),
-  
-  sendMessage: (conversationId: string, message: string) =>
-    api.post(`/api/v1/chats/conversations/${conversationId}/messages/`, {
+  getConversation: async (id: string) => {
+    return api.get(`/api/v1/chats/conversations/${id}/`);
+  },
+
+  sendMessage: async (conversationId: string, message: string) => {
+    return api.post(`/api/v1/chats/conversations/${conversationId}/messages/`, {
       message,
-    }),
+    });
+  },
 };
 
+/**
+ * Notifications API (Client-side)
+ */
 export const notificationsAPI = {
-  list: () =>
-    api.get('/api/v1/notifications/'),
-  
-  markAsRead: (id: string) =>
-    api.patch(`/api/v1/notifications/${id}/`, { is_read: true }),
-  
-  markAllAsRead: () =>
-    api.post('/api/v1/notifications/mark-all-read/'),
+  list: async (params?: { unread_only?: boolean }) => {
+    return api.get('/api/v1/notifications/', { params });
+  },
+
+  markAsRead: async (id: string) => {
+    return api.post(`/api/v1/notifications/${id}/mark-read/`);
+  },
+
+  markAllAsRead: async () => {
+    return api.post('/api/v1/notifications/mark-all-read/');
+  },
 };

@@ -4,8 +4,10 @@ import {
   Outlet,
   Scripts,
   ScrollRestoration,
+  useLoaderData,
 } from "@remix-run/react";
-import type { LinksFunction } from "@remix-run/node";
+import type { LinksFunction, LoaderFunctionArgs } from "@remix-run/node";
+import { json } from "@remix-run/node";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useState } from "react";
 
@@ -24,6 +26,26 @@ export const links: LinksFunction = () => [
     href: "https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap",
   },
 ];
+
+// Expose environment variables to client
+export async function loader({ request }: LoaderFunctionArgs) {
+  return json({
+    ENV: {
+      API_URL: process.env.API_URL || 'http://localhost:8000',
+      NODE_ENV: process.env.NODE_ENV || 'development',
+    },
+  });
+}
+
+// TypeScript declaration for window.ENV
+declare global {
+  interface Window {
+    ENV: {
+      API_URL: string;
+      NODE_ENV: string;
+    };
+  }
+}
 
 export function Layout({ children }: { children: React.ReactNode }) {
   return (
@@ -44,6 +66,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
 }
 
 export default function App() {
+  const { ENV } = useLoaderData<typeof loader>();
+  
   const [queryClient] = useState(
     () =>
       new QueryClient({
@@ -58,6 +82,11 @@ export default function App() {
 
   return (
     <QueryClientProvider client={queryClient}>
+      <script
+        dangerouslySetInnerHTML={{
+          __html: `window.ENV = ${JSON.stringify(ENV)}`,
+        }}
+      />
       <Outlet />
     </QueryClientProvider>
   );

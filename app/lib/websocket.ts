@@ -1,6 +1,6 @@
 // Native WebSocket service for Django Channels
-const WS_URL = process.env.NODE_ENV === 'production'
-  ? 'wss://api.onetop.com'
+const WS_URL = typeof window !== 'undefined'
+  ? (window.ENV?.API_URL?.replace('http', 'ws') || 'ws://localhost:8000')
   : 'ws://localhost:8000';
 
 type MessageHandler = (data: any) => void;
