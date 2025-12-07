@@ -1,7 +1,7 @@
 // Server-side API client for Remix loaders/actions
 import axios from 'axios';
 
-const API_URL = process.env.API_URL || 'http://localhost:8000/api/v1';
+const API_URL = process.env.API_URL || 'http://localhost:8000';
 
 /**
  * Auth API (Server-side - no token needed for register/login)
@@ -20,7 +20,7 @@ export const authAPI = {
         'Content-Type': 'application/json',
       },
     });
-    return client.post('/auth/register/', data);
+    return client.post('/api/v1/auth/register/', data);
   },
 
   login: async (email: string, password: string) => {
@@ -30,7 +30,7 @@ export const authAPI = {
         'Content-Type': 'application/json',
       },
     });
-    return client.post('/auth/login/', { email, password });
+    return client.post('/api/v1/auth/login/', { email, password });
   },
 };
 
@@ -55,17 +55,17 @@ export function createAPIClient(accessToken: string) {
 export const applicationsAPI = {
   list: async (accessToken: string, params?: { limit?: number; offset?: number }) => {
     const client = createAPIClient(accessToken);
-    return client.get('/applications/', { params });
+    return client.get('/api/v1/applications/', { params });
   },
 
   get: async (accessToken: string, id: string) => {
     const client = createAPIClient(accessToken);
-    return client.get(`/applications/${id}/`);
+    return client.get(`/api/v1/applications/${id}/`);
   },
 
   getStats: async (accessToken: string) => {
     const client = createAPIClient(accessToken);
-    return client.get('/applications/stats/');
+    return client.get('/api/v1/applications/stats/');
   },
 };
 
@@ -75,17 +75,17 @@ export const applicationsAPI = {
 export const jobsAPI = {
   list: async (accessToken: string, params?: any) => {
     const client = createAPIClient(accessToken);
-    return client.get('/jobs/', { params });
+    return client.get('/api/v1/jobs/', { params });
   },
 
   get: async (accessToken: string, id: string) => {
     const client = createAPIClient(accessToken);
-    return client.get(`/jobs/${id}/`);
+    return client.get(`/api/v1/jobs/${id}/`);
   },
 
   getSaved: async (accessToken: string) => {
     const client = createAPIClient(accessToken);
-    return client.get('/jobs/saved/');
+    return client.get('/api/v1/jobs/saved/');
   },
 };
 
@@ -95,12 +95,12 @@ export const jobsAPI = {
 export const chatsAPI = {
   list: async (accessToken: string) => {
     const client = createAPIClient(accessToken);
-    return client.get('/chats/conversations/');
+    return client.get('/api/v1/chats/conversations/');
   },
 
   getUnreadCount: async (accessToken: string) => {
     const client = createAPIClient(accessToken);
-    return client.get('/chats/unread-count/');
+    return client.get('/api/v1/chats/unread-count/');
   },
 };
 
@@ -110,12 +110,12 @@ export const chatsAPI = {
 export const notificationsAPI = {
   list: async (accessToken: string, params?: { unread_only?: boolean }) => {
     const client = createAPIClient(accessToken);
-    return client.get('/notifications/', { params });
+    return client.get('/api/v1/notifications/', { params });
   },
 
   getUnreadCount: async (accessToken: string) => {
     const client = createAPIClient(accessToken);
-    return client.get('/notifications/unread-count/');
+    return client.get('/api/v1/notifications/unread-count/');
   },
 };
 
@@ -125,6 +125,6 @@ export const notificationsAPI = {
 export const resumesAPI = {
   list: async (accessToken: string) => {
     const client = createAPIClient(accessToken);
-    return client.get('/resumes/');
+    return client.get('/api/v1/resumes/');
   },
 };

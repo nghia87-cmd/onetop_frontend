@@ -48,12 +48,11 @@ export async function action({ request }: ActionFunctionArgs) {
   try {
     // Step 1: Register user
     await authAPI.register({
-      email: data.email,
-      // REMOVED: username - backend uses email as username automatically
-      full_name: data.full_name,
-      password: data.password,
-      user_type: data.user_type,
-      phone_number: data.phone_number || undefined, // CRITICAL FIX: Actually save phone_number
+      email: data.email as string,
+      full_name: data.full_name as string,
+      password: data.password as string,
+      user_type: data.user_type as string,
+      phone_number: data.phone_number ? (data.phone_number as string) : undefined,
     });
 
     // Step 2: Auto login after successful registration
@@ -77,7 +76,14 @@ export async function action({ request }: ActionFunctionArgs) {
       return redirect(`/login?message=${encodeURIComponent(message)}`);
     }
   } catch (error: any) {
-    console.error('Registration error:', error.response?.data || error.message);
+    console.error('Registration error details:', {
+      message: error.message,
+      response: error.response?.data,
+      status: error.response?.status,
+      url: error.config?.url,
+      data: error.config?.data,
+    });
+    
     const errors = error.response?.data;
     let errorMessage = "Đăng ký thất bại. Vui lòng thử lại.";
 
