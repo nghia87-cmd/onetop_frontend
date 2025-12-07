@@ -35,29 +35,24 @@
 ### 3. 🔒 WebSocket Security: Token in URL - FIXED
 **Problem**: Token exposed in WebSocket URL (visible in logs, browser history).
 
-**Solution**:
-- ✅ Removed token from WebSocket connection URL
-- ✅ Send authentication via first message after connection: `{ type: 'authenticate', token: 'xxx' }`
-- ⚠️ **Backend TODO**: Django Channels consumer must handle `authenticate` message type
+**Solution Implemented**:
+- ✅ **One-Time Ticket System** (Most Secure)
+- ✅ Frontend calls `/api/v1/ws-ticket/` to get temporary ticket
+- ✅ Ticket expires in 10 seconds and can only be used once
+- ✅ WebSocket connects with ticket in URL: `ws://.../?ticket=<ticket>`
+- ✅ Backend middleware validates ticket and grants access
 
 **Files Modified**:
-- `app/lib/websocket.ts` - Token sent via message instead of URL
+- `app/lib/websocket.ts` - Implements ticket-based auth flow
+- `app/lib/api.ts` - Added `wsTicketAPI.getTicket()`
+- Backend: `apps/core/views.py` - WebSocketTicketView
+- Backend: `apps/chats/middleware.py` - Ticket validation
 
-**Backend Action Required**:
-```python
-# In apps/chats/consumers.py or apps/notifications/consumers.py
-async def receive(self, text_data):
-    data = json.loads(text_data)
-    
-    if data.get('type') == 'authenticate':
-        token = data.get('token')
-        # Validate JWT token
-        # Set self.user if valid
-        # Send authentication success/failure message
-        return
-    
-    # ... rest of message handling
-```
+**Security Benefits**:
+- Ticket expires quickly (10s window)
+- One-time use only (prevents replay attacks)
+- JWT token never exposed in URL or logs
+- Minimal attack surface
 
 ---
 
@@ -219,14 +214,53 @@ class ChatConsumer(AsyncWebsocketConsumer):
 ## 🔐 Security Checklist
 
 - [x] HttpOnly cookies for tokens
-- [x] CORS with credentials enabled
+- [x] CORS with credentials enabled  
 - [x] No localStorage token exposure
-- [x] WebSocket auth not in URL
+- [x] WebSocket auth via one-time ticket (secure)
 - [x] Refresh token race condition handled
 - [x] TypeScript type safety
-- [ ] CSRF protection (if needed for forms)
-- [ ] Rate limiting (backend)
-- [ ] SESSION_SECRET in environment variable (not .env file)
+- [x] CSRF protection utilities (app/lib/csrf.ts)
+- [x] CSRF_TRUSTED_ORIGINS configured (backend)
+- [ ] Rate limiting (backend - TODO)
+- [ ] SESSION_SECRET in environment variable (recommended: use secrets manager)
+
+---
+
+## 🛡️ CSRF Protection Implementation
+
+**Status**: ✅ Implemented
+
+**Frontend** (`app/lib/csrf.ts`):
+- `getCsrfToken()` - Read csrftoken from cookie
+- `withCsrfHeaders()` - Add X-CSRFToken header for critical operations
+
+**Backend** (`settings.py`):
+- `CSRF_TRUSTED_ORIGINS` - Whitelist frontend domains
+- Django CSRF middleware already enabled
+
+**When to Use**:
+Use CSRF protection for critical mutations:
+- Password changes
+- Payment operations  
+- Account deletion
+- Permission changes
+
+**Example Usage**:
+```typescript
+// In Remix action
+const csrfToken = getCsrfToken();
+await fetch('/api/v1/change-password/', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    'X-CSRFToken': csrfToken || '',
+  },
+  credentials: 'include',
+  body: JSON.stringify(data),
+});
+```
+
+**Note**: Regular API calls with `withCredentials: true` and `SameSite=Lax` cookie already provide good CSRF protection for most operations.
 
 ---
 
