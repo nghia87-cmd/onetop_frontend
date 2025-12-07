@@ -1,12 +1,12 @@
-import type { ActionFunctionArgs, MetaFunction } from "@remix-run/node";
-import { json } from "@remix-run/node";
+import type { ActionFunctionArgs, LoaderFunctionArgs, MetaFunction } from "@remix-run/node";
+import { json, redirect } from "@remix-run/node";
 import { Form, Link, useActionData, useNavigation } from "@remix-run/react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { useEffect } from "react";
 import { Briefcase, Mail, Lock, User, Phone, AlertCircle, CheckCircle } from "lucide-react";
 import { authAPI } from "~/lib/api";
+import { createUserSession, getOptionalUser } from "~/lib/session.server";
 
 export const meta: MetaFunction = () => {
   return [
@@ -14,6 +14,15 @@ export const meta: MetaFunction = () => {
     { name: "description", content: "Tạo tài khoản OneTop miễn phí" },
   ];
 };
+
+// Redirect if already logged in
+export async function loader({ request }: LoaderFunctionArgs) {
+  const user = await getOptionalUser(request);
+  if (user) {
+    return redirect(user.user.user_type === 'RECRUITER' ? '/recruiter/dashboard' : '/dashboard');
+  }
+  return json({});
+}
 
 const registerSchema = z.object({
   email: z.string().email("Email không hợp lệ"),
@@ -38,7 +47,7 @@ export async function action({ request }: ActionFunctionArgs) {
 
   try {
     // Step 1: Register user
-    const registerResponse = await authAPI.register({
+    await authAPI.register({
       email: data.email,
       username: data.username,
       full_name: data.full_name,
@@ -57,21 +66,12 @@ export async function action({ request }: ActionFunctionArgs) {
       const { access, refresh, user_type, ...userData } = loginResponse.data;
       const user = { user_type, ...userData };
 
-      return json({ 
-        success: true, 
-        message: "Đăng ký thành công!",
-        access,
-        refresh,
-        user,
-        redirectTo: user_type === 'RECRUITER' ? '/recruiter/dashboard' : '/dashboard'
-      });
+      // Create secure session with HTTP-only cookie
+      const redirectTo = user_type === 'RECRUITER' ? '/recruiter/dashboard' : '/dashboard';
+      return await createUserSession(access, refresh, user, redirectTo);
     } catch (loginError) {
-      // Registration succeeded but auto-login failed
-      return json({ 
-        success: true, 
-        message: "Đăng ký thành công! Vui lòng đăng nhập.",
-        user: registerResponse.data 
-      });
+      // Registration succeeded but auto-login failed - redirect to login
+      return redirect('/login?message=Đăng ký thành công! Vui lòng đăng nhập.');
     }
   } catch (error: any) {
     console.error('Registration error:', error.response?.data || error.message);
@@ -126,16 +126,6 @@ export default function Register() {
 
   const userType = watch("user_type");
 
-  // Handle successful registration with auto-login
-  useEffect(() => {
-    if (actionData?.success && 'access' in actionData && 'refresh' in actionData && 'user' in actionData && 'redirectTo' in actionData) {
-      localStorage.setItem('access_token', actionData.access as string);
-      localStorage.setItem('refresh_token', actionData.refresh as string);
-      localStorage.setItem('user', JSON.stringify(actionData.user));
-      window.location.href = actionData.redirectTo as string;
-    }
-  }, [actionData]);
-
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 py-12 px-4">
       <div className="max-w-2xl mx-auto">
@@ -155,23 +145,6 @@ export default function Register() {
 
         {/* Register Form */}
         <div className="bg-white rounded-xl shadow-lg p-8">
-          {/* Success Message */}
-          {actionData?.success && 'message' in actionData && (
-            <div className="mb-6 bg-green-50 border border-green-200 rounded-lg p-4 flex items-start space-x-3">
-              <CheckCircle className="h-5 w-5 text-green-600 mt-0.5 flex-shrink-0" />
-              <div>
-                <p className="text-sm text-green-800 font-medium">Đăng ký thành công!</p>
-                <p className="text-sm text-green-700 mt-1">{actionData.message}</p>
-                <Link
-                  to="/login"
-                  className="text-sm font-medium text-green-700 hover:text-green-800 mt-2 inline-block"
-                >
-                  → Đăng nhập ngay
-                </Link>
-              </div>
-            </div>
-          )}
-
           {/* Error Message */}
           {actionData && 'error' in actionData && actionData.error && (
             <div className="mb-6 bg-red-50 border border-red-200 rounded-lg p-4 flex items-start space-x-3">

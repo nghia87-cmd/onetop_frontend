@@ -1,12 +1,12 @@
-import type { ActionFunctionArgs, MetaFunction } from "@remix-run/node";
-import { json } from "@remix-run/node";
-import { Form, Link, useActionData, useNavigation } from "@remix-run/react";
+import type { ActionFunctionArgs, LoaderFunctionArgs, MetaFunction } from "@remix-run/node";
+import { json, redirect } from "@remix-run/node";
+import { Form, Link, useActionData, useNavigation, useSearchParams } from "@remix-run/react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { useEffect } from "react";
 import { Briefcase, Mail, Lock, AlertCircle } from "lucide-react";
 import { authAPI } from "~/lib/api";
+import { createUserSession, getOptionalUser } from "~/lib/session.server";
 
 export const meta: MetaFunction = () => {
   return [
@@ -14,6 +14,15 @@ export const meta: MetaFunction = () => {
     { name: "description", content: "Đăng nhập vào tài khoản OneTop" },
   ];
 };
+
+// Redirect if already logged in
+export async function loader({ request }: LoaderFunctionArgs) {
+  const user = await getOptionalUser(request);
+  if (user) {
+    return redirect(user.user.user_type === 'RECRUITER' ? '/recruiter/dashboard' : '/dashboard');
+  }
+  return json({});
+}
 
 const loginSchema = z.object({
   email: z.string().email("Email không hợp lệ"),
@@ -26,6 +35,7 @@ export async function action({ request }: ActionFunctionArgs) {
   const formData = await request.formData();
   const email = formData.get("email") as string;
   const password = formData.get("password") as string;
+  const redirectTo = (formData.get("redirectTo") as string) || undefined;
 
   try {
     const response = await authAPI.login(email, password);
@@ -34,15 +44,9 @@ export async function action({ request }: ActionFunctionArgs) {
     // Reconstruct user object from response
     const user = { user_type, ...userData };
 
-    // In production, use secure HTTP-only cookies
-    // For now, return tokens to store in localStorage on client
-    return json({ 
-      success: true, 
-      access, 
-      refresh, 
-      user,
-      redirectTo: user_type === 'RECRUITER' ? '/recruiter/dashboard' : '/dashboard'
-    });
+    // Create secure session with HTTP-only cookie
+    const defaultRedirect = user_type === 'RECRUITER' ? '/recruiter/dashboard' : '/dashboard';
+    return await createUserSession(access, refresh, user, redirectTo || defaultRedirect);
   } catch (error: any) {
     return json(
       { 
@@ -58,6 +62,8 @@ export default function Login() {
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
   const isSubmitting = navigation.state === "submitting";
+  const [searchParams] = useSearchParams();
+  const redirectTo = searchParams.get("redirectTo") || undefined;
 
   const {
     register,
@@ -65,16 +71,6 @@ export default function Login() {
   } = useForm<LoginForm>({
     resolver: zodResolver(loginSchema),
   });
-
-  // Handle successful login
-  useEffect(() => {
-    if (actionData?.success && 'access' in actionData) {
-      localStorage.setItem('access_token', actionData.access);
-      localStorage.setItem('refresh_token', actionData.refresh);
-      localStorage.setItem('user', JSON.stringify(actionData.user));
-      window.location.href = actionData.redirectTo;
-    }
-  }, [actionData]);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
@@ -96,6 +92,9 @@ export default function Login() {
         {/* Login Form */}
         <div className="bg-white rounded-xl shadow-lg p-8">
           <Form method="post" className="space-y-6">
+            {/* Hidden redirect field */}
+            {redirectTo && <input type="hidden" name="redirectTo" value={redirectTo} />}
+            
             {/* Error Message */}
             {actionData && 'error' in actionData && actionData.error && (
               <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-start space-x-3">
