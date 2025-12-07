@@ -22,9 +22,9 @@ export function createAPIClient(accessToken: string) {
  * Applications API (Server-side)
  */
 export const applicationsAPI = {
-  list: async (accessToken: string) => {
+  list: async (accessToken: string, params?: { limit?: number; offset?: number }) => {
     const client = createAPIClient(accessToken);
-    return client.get('/applications/');
+    return client.get('/applications/', { params });
   },
 
   get: async (accessToken: string, id: string) => {

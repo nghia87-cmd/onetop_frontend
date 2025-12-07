@@ -17,6 +17,7 @@ import {
 import { requireAuth } from "~/lib/session.server";
 import { applicationsAPI, chatsAPI, notificationsAPI } from "~/lib/api.server";
 import type { Application, DashboardStats, Notification } from "~/types/application";
+import { StatusBadge } from "~/components/StatusBadge";
 
 export const meta: MetaFunction = () => {
   return [
@@ -36,32 +37,28 @@ export async function loader({ request }: LoaderFunctionArgs) {
 
   try {
     // Fetch real data from API in parallel
-    const [applicationsRes, unreadCountRes, notificationsRes] = await Promise.all([
-      applicationsAPI.list(accessToken),
+    // Optimized: Use stats endpoint + limited applications
+    const [recentAppsRes, statsRes, unreadCountRes, notificationsRes] = await Promise.all([
+      applicationsAPI.list(accessToken, { limit: 3 }), // Only 3 recent for display
+      applicationsAPI.getStats(accessToken), // Dedicated stats endpoint
       chatsAPI.getUnreadCount(accessToken),
       notificationsAPI.list(accessToken, { unread_only: true }),
     ]);
 
-    const applications: Application[] = applicationsRes.data;
+    const recentApplications: Application[] = recentAppsRes.data.results || recentAppsRes.data;
     
-    // Calculate stats from applications
-    const stats: DashboardStats = {
-      totalApplications: applications.length,
-      pendingApplications: applications.filter((app) => 
-        app.status === 'PENDING' || app.status === 'REVIEWING'
-      ).length,
-      interviews: applications.filter((app) => 
-        app.status === 'INTERVIEW_SCHEDULED'
-      ).length,
-      offers: applications.filter((app) => 
-        app.status === 'ACCEPTED' || app.status === 'OFFER_EXTENDED'
-      ).length,
+    // Use stats from backend (if available), otherwise calculate from recent
+    const stats: DashboardStats = statsRes.data || {
+      totalApplications: 0,
+      pendingApplications: 0,
+      interviews: 0,
+      offers: 0,
     };
 
     return json({ 
       user,
       stats,
-      recentApplications: applications.slice(0, 3), // Latest 3 applications
+      recentApplications,
       unreadMessages: unreadCountRes.data.count || 0,
       notifications: notificationsRes.data.results?.slice(0, 3) || [],
     });
@@ -96,20 +93,6 @@ export default function CandidateDashboard() {
       addSuffix: true, 
       locale: vi 
     });
-  };
-
-  // Helper function to get status color and text
-  const getStatusDisplay = (status: string) => {
-    const statusMap: Record<string, { color: string; text: string }> = {
-      'PENDING': { color: 'blue', text: 'Chờ xử lý' },
-      'REVIEWING': { color: 'yellow', text: 'Đang xem xét' },
-      'SHORTLISTED': { color: 'green', text: 'Được chọn' },
-      'INTERVIEW_SCHEDULED': { color: 'purple', text: 'Đã hẹn PV' },
-      'REJECTED': { color: 'red', text: 'Từ chối' },
-      'ACCEPTED': { color: 'green', text: 'Chấp nhận' },
-      'OFFER_EXTENDED': { color: 'green', text: 'Nhận offer' },
-    };
-    return statusMap[status] || { color: 'gray', text: status };
   };
 
   return (
@@ -244,8 +227,7 @@ export default function CandidateDashboard() {
                   </div>
                 ) : (
                   <div className="space-y-4">
-                    {recentApplications.map((application: any) => {
-                      const statusDisplay = getStatusDisplay(application.status);
+                    {recentApplications.map((application) => {
                       return (
                         <div
                           key={application.id}
@@ -259,24 +241,10 @@ export default function CandidateDashboard() {
                               {application.job?.company?.name || 'Company'}
                             </p>
                             <p className="text-xs text-gray-500 mt-1">
-                              {formatDate(application.created_at)}
+                              {formatDate(application.applied_at)}
                             </p>
                           </div>
-                          <div>
-                            <span
-                              className={`
-                                px-3 py-1 rounded-full text-xs font-medium
-                                ${statusDisplay.color === 'yellow' ? 'bg-yellow-100 text-yellow-800' : ''}
-                                ${statusDisplay.color === 'green' ? 'bg-green-100 text-green-800' : ''}
-                                ${statusDisplay.color === 'blue' ? 'bg-blue-100 text-blue-800' : ''}
-                                ${statusDisplay.color === 'purple' ? 'bg-purple-100 text-purple-800' : ''}
-                                ${statusDisplay.color === 'red' ? 'bg-red-100 text-red-800' : ''}
-                                ${statusDisplay.color === 'gray' ? 'bg-gray-100 text-gray-800' : ''}
-                              `}
-                            >
-                              {statusDisplay.text}
-                            </span>
-                          </div>
+                          <StatusBadge status={application.status} />
                         </div>
                       );
                     })}

@@ -5,11 +5,13 @@ import {
   Scripts,
   ScrollRestoration,
   useLoaderData,
+  useNavigate,
 } from "@remix-run/react";
 import type { LinksFunction, LoaderFunctionArgs } from "@remix-run/node";
 import { json } from "@remix-run/node";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import type { ENV } from "~/hooks/useEnv";
 
 import stylesheet from "~/tailwind.css?url";
 
@@ -32,7 +34,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
   return json({
     ENV: {
       API_URL: process.env.API_URL || 'http://localhost:8000',
-      NODE_ENV: process.env.NODE_ENV || 'development',
+      NODE_ENV: (process.env.NODE_ENV || 'development') as ENV['NODE_ENV'],
     },
   });
 }
@@ -40,10 +42,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
 // TypeScript declaration for window.ENV
 declare global {
   interface Window {
-    ENV: {
-      API_URL: string;
-      NODE_ENV: string;
-    };
+    ENV: ENV;
   }
 }
 
@@ -67,6 +66,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
 export default function App() {
   const { ENV } = useLoaderData<typeof loader>();
+  const navigate = useNavigate();
   
   const [queryClient] = useState(
     () =>
@@ -79,6 +79,16 @@ export default function App() {
         },
       })
   );
+
+  // Listen for auth expiration events from api.ts
+  useEffect(() => {
+    const handleAuthExpired = () => {
+      navigate('/login', { replace: true });
+    };
+
+    window.addEventListener('auth:expired', handleAuthExpired);
+    return () => window.removeEventListener('auth:expired', handleAuthExpired);
+  }, [navigate]);
 
   return (
     <QueryClientProvider client={queryClient}>

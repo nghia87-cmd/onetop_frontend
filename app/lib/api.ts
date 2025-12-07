@@ -3,9 +3,10 @@
 // This file is only for special cases (e.g., real-time features, client-side mutations)
 
 import axios from 'axios';
+import { getEnv } from '~/hooks/useEnv';
 
 const API_BASE_URL = typeof window !== 'undefined'
-  ? window.ENV?.API_URL || 'http://localhost:8000'
+  ? getEnv().API_URL
   : 'http://localhost:8000';
 
 /**
@@ -76,8 +77,13 @@ api.interceptors.response.use(
         return api(originalRequest);
       } catch (refreshError) {
         processQueue(refreshError);
-        // Session expired - redirect to login
-        window.location.href = '/login';
+        
+        // Emit event instead of hard redirect (allow Remix to handle)
+        if (typeof window !== 'undefined') {
+          const event = new CustomEvent('auth:expired');
+          window.dispatchEvent(event);
+        }
+        
         return Promise.reject(refreshError);
       } finally {
         isRefreshing = false;
@@ -107,6 +113,16 @@ export const authAPI = {
 
   me: async () => {
     return api.get('/api/v1/auth/me/');
+  },
+};
+
+/**
+ * WebSocket Ticket API
+ * Get one-time ticket for WebSocket authentication (expires in 10s)
+ */
+export const wsTicketAPI = {
+  getTicket: async () => {
+    return api.post('/api/v1/ws-ticket/');
   },
 };
 

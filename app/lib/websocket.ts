@@ -1,6 +1,9 @@
 // Native WebSocket service for Django Channels
+import { wsTicketAPI } from './api';
+import { getEnv } from '~/hooks/useEnv';
+
 const WS_URL = typeof window !== 'undefined'
-  ? (window.ENV?.API_URL?.replace('http', 'ws') || 'ws://localhost:8000')
+  ? (getEnv().API_URL.replace('http', 'ws'))
   : 'ws://localhost:8000';
 
 type MessageHandler = (data: any) => void;
@@ -18,38 +21,35 @@ class WebSocketService {
 
   /**
    * Connect to Django Channels WebSocket
-   * @param token - JWT access token
+   * @param token - JWT access token (used to get ticket)
    * @param conversationId - Chat conversation ID (optional for notifications only)
    * 
-   * Security Note: Token is sent in URL during initial handshake.
-   * TODO: Implement ticket-based auth or send token via first message after connection
+   * Security: Uses one-time ticket system
+   * Flow: GET ticket → Connect with ticket → Ticket expires after 10s
    */
-  connect(token: string, conversationId?: string) {
+  async connect(token: string, conversationId?: string) {
     // Save credentials for reconnection
     this.currentToken = token;
     this.currentConversationId = conversationId || null;
 
-    // Django Channels WebSocket endpoint (token-less connection)
-    const endpoint = conversationId 
-      ? `/ws/chat/${conversationId}/`
-      : `/ws/notifications/`;
-    
-    const url = `${WS_URL}${endpoint}`;
-    
     try {
+      // Step 1: Get one-time ticket (expires in 10 seconds)
+      const ticketResponse = await wsTicketAPI.getTicket();
+      const ticket = ticketResponse.data.ticket;
+
+      // Step 2: Connect immediately with ticket
+      const endpoint = conversationId 
+        ? `/ws/chat/${conversationId}/?ticket=${ticket}`
+        : `/ws/notifications/?ticket=${ticket}`;
+      
+      const url = `${WS_URL}${endpoint}`;
+      
       this.socket = new WebSocket(url);
 
       this.socket.onopen = () => {
         console.log('✅ WebSocket connected:', endpoint);
         this.reconnectAttempts = 0;
-        
-        // Send authentication token via first message (more secure than URL)
-        if (this.socket && this.currentToken) {
-          this.socket.send(JSON.stringify({
-            type: 'authenticate',
-            token: this.currentToken
-          }));
-        }
+        // No need to send auth message - ticket already validated in handshake
       };
 
       this.socket.onmessage = (event) => {
@@ -78,7 +78,8 @@ class WebSocketService {
         this.handleReconnect();
       };
     } catch (error) {
-      console.error('❌ Failed to create WebSocket connection:', error);
+      console.error('❌ Failed to get WebSocket ticket or connect:', error);
+      this.handleReconnect();
     }
   }
 
