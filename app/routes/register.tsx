@@ -26,7 +26,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
 
 const registerSchema = z.object({
   email: z.string().email("Email không hợp lệ"),
-  username: z.string().min(3, "Username phải có ít nhất 3 ký tự"),
+  // REMOVED: username field - backend uses email as username
   full_name: z.string().min(2, "Họ tên phải có ít nhất 2 ký tự"),
   password: z.string().min(6, "Mật khẩu phải có ít nhất 6 ký tự"),
   password_confirm: z.string(),
@@ -49,11 +49,11 @@ export async function action({ request }: ActionFunctionArgs) {
     // Step 1: Register user
     await authAPI.register({
       email: data.email,
-      username: data.username,
+      // REMOVED: username - backend uses email as username automatically
       full_name: data.full_name,
       password: data.password,
       user_type: data.user_type,
-      phone_number: data.phone_number || undefined,
+      phone_number: data.phone_number || undefined, // CRITICAL FIX: Actually save phone_number
     });
 
     // Step 2: Auto login after successful registration
@@ -70,8 +70,11 @@ export async function action({ request }: ActionFunctionArgs) {
       const redirectTo = user_type === 'RECRUITER' ? '/recruiter/dashboard' : '/dashboard';
       return await createUserSession(access, refresh, user, redirectTo);
     } catch (loginError) {
-      // Registration succeeded but auto-login failed - redirect to login
-      return redirect('/login?message=Đăng ký thành công! Vui lòng đăng nhập.');
+      // IMPROVED UX: Registration succeeded but auto-login failed (Recruiter pending approval)
+      const message = data.user_type === 'RECRUITER'
+        ? 'Đăng ký thành công! Tài khoản của bạn đang chờ phê duyệt. Chúng tôi sẽ thông báo qua email khi tài khoản được kích hoạt.'
+        : 'Đăng ký thành công! Vui lòng đăng nhập.';
+      return redirect(`/login?message=${encodeURIComponent(message)}`);
     }
   } catch (error: any) {
     console.error('Registration error:', error.response?.data || error.message);
@@ -85,12 +88,6 @@ export async function action({ request }: ActionFunctionArgs) {
           errorMessage = errors.email[0];
         } else {
           errorMessage = "Email đã được sử dụng";
-        }
-      } else if (errors.username) {
-        if (Array.isArray(errors.username)) {
-          errorMessage = errors.username[0];
-        } else {
-          errorMessage = "Username đã tồn tại";
         }
       } else if (errors.detail) {
         errorMessage = errors.detail;
@@ -214,76 +211,40 @@ export default function Register() {
                 <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
                   Email *
                 </label>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <Mail className="h-5 w-5 text-gray-400" />
-                  </div>
-                  <input
-                    {...register("email")}
-                    type="email"
-                    id="email"
-                    name="email"
-                    autoComplete="email"
-                    className={`
-                      block w-full pl-10 pr-3 py-3 border rounded-lg
-                      focus:outline-none focus:ring-2 focus:ring-blue-500
-                      ${errors.email || (actionData && 'fieldErrors' in actionData && actionData.fieldErrors?.email) ? 'border-red-300' : 'border-gray-300'}
-                    `}
-                    placeholder="you@example.com"
-                  />
+            {/* Email - Single column (Username removed, backend uses email) */}
+            <div>
+              <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
+                Email * <span className="text-xs text-gray-500">(Dùng để đăng nhập)</span>
+              </label>
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <Mail className="h-5 w-5 text-gray-400" />
                 </div>
-                {errors.email && (
-                  <p className="mt-1 text-sm text-red-600">{errors.email.message}</p>
-                )}
-                {actionData && 'fieldErrors' in actionData && actionData.fieldErrors?.email && (
-                  <p className="mt-1 text-sm text-red-600">
-                    {Array.isArray(actionData.fieldErrors.email) 
-                      ? actionData.fieldErrors.email[0] 
-                      : actionData.fieldErrors.email}
-                  </p>
-                )}
+                <input
+                  {...register("email")}
+                  type="email"
+                  id="email"
+                  name="email"
+                  autoComplete="email"
+                  className={`
+                    block w-full pl-10 pr-3 py-3 border rounded-lg
+                    focus:outline-none focus:ring-2 focus:ring-blue-500
+                    ${errors.email || (actionData && 'fieldErrors' in actionData && actionData.fieldErrors?.email) ? 'border-red-300' : 'border-gray-300'}
+                  `}
+                  placeholder="you@example.com"
+                />
               </div>
-
-              <div>
-                <label htmlFor="username" className="block text-sm font-medium text-gray-700 mb-2">
-                  Username *
-                </label>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <User className="h-5 w-5 text-gray-400" />
-                  </div>
-                  <input
-                    {...register("username")}
-                    type="text"
-                    id="username"
-                    name="username"
-                    autoComplete="username"
-                    className={`
-                      block w-full pl-10 pr-3 py-3 border rounded-lg
-                      focus:outline-none focus:ring-2 focus:ring-blue-500
-                      ${errors.username || (actionData && 'fieldErrors' in actionData && actionData.fieldErrors?.username) ? 'border-red-300' : 'border-gray-300'}
-                    `}
-                    placeholder="username"
-                  />
-                </div>
-                {errors.username && (
-                  <p className="mt-1 text-sm text-red-600">{errors.username.message}</p>
-                )}
-                {actionData && 'fieldErrors' in actionData && actionData.fieldErrors?.username && (
-                  <p className="mt-1 text-sm text-red-600">
-                    {Array.isArray(actionData.fieldErrors.username) 
-                      ? actionData.fieldErrors.username[0] 
-                      : actionData.fieldErrors.username}
-                  </p>
-                )}
-              </div>
-            </div>
-
-            {/* Full Name & Phone */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label htmlFor="full_name" className="block text-sm font-medium text-gray-700 mb-2">
-                  Họ và tên *
+              {errors.email && (
+                <p className="mt-1 text-sm text-red-600">{errors.email.message}</p>
+              )}
+              {actionData && 'fieldErrors' in actionData && actionData.fieldErrors?.email && (
+                <p className="mt-1 text-sm text-red-600">
+                  {Array.isArray(actionData.fieldErrors.email) 
+                    ? actionData.fieldErrors.email[0] 
+                    : actionData.fieldErrors.email}
+                </p>
+              )}
+            </div>Họ và tên *
                 </label>
                 <input
                   {...register("full_name")}
