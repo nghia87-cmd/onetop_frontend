@@ -1,6 +1,8 @@
 import type { LoaderFunctionArgs, MetaFunction } from "@remix-run/node";
 import { json } from "@remix-run/node";
 import { Link, useLoaderData, Form } from "@remix-run/react";
+import { formatDistanceToNow } from "date-fns";
+import { vi } from "date-fns/locale";
 import { 
   Briefcase, 
   FileText, 
@@ -14,6 +16,7 @@ import {
 } from "lucide-react";
 import { requireAuth } from "~/lib/session.server";
 import { applicationsAPI, chatsAPI, notificationsAPI } from "~/lib/api.server";
+import type { Application, DashboardStats, Notification } from "~/types/application";
 
 export const meta: MetaFunction = () => {
   return [
@@ -39,18 +42,18 @@ export async function loader({ request }: LoaderFunctionArgs) {
       notificationsAPI.list(accessToken, { unread_only: true }),
     ]);
 
-    const applications = applicationsRes.data;
+    const applications: Application[] = applicationsRes.data;
     
     // Calculate stats from applications
-    const stats = {
+    const stats: DashboardStats = {
       totalApplications: applications.length,
-      pendingApplications: applications.filter((app: any) => 
+      pendingApplications: applications.filter((app) => 
         app.status === 'PENDING' || app.status === 'REVIEWING'
       ).length,
-      interviews: applications.filter((app: any) => 
+      interviews: applications.filter((app) => 
         app.status === 'INTERVIEW_SCHEDULED'
       ).length,
-      offers: applications.filter((app: any) => 
+      offers: applications.filter((app) => 
         app.status === 'ACCEPTED' || app.status === 'OFFER_EXTENDED'
       ).length,
     };
@@ -87,18 +90,12 @@ export default function CandidateDashboard() {
   const { user, stats, recentApplications, unreadMessages, notifications } = loaderData;
   const error = 'error' in loaderData ? (loaderData.error as string) : undefined;
 
-  // Helper function to format date
+  // Helper function to format date using date-fns
   const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    const now = new Date();
-    const diffMs = now.getTime() - date.getTime();
-    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-    
-    if (diffDays === 0) return 'Hôm nay';
-    if (diffDays === 1) return 'Hôm qua';
-    if (diffDays < 7) return `${diffDays} ngày trước`;
-    if (diffDays < 30) return `${Math.floor(diffDays / 7)} tuần trước`;
-    return date.toLocaleDateString('vi-VN');
+    return formatDistanceToNow(new Date(dateString), { 
+      addSuffix: true, 
+      locale: vi 
+    });
   };
 
   // Helper function to get status color and text

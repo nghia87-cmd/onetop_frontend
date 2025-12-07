@@ -20,15 +20,70 @@ export const api = axios.create({
   withCredentials: true, // Send cookies automatically
 });
 
-// Simple response interceptor for error handling
+// Request queue for handling concurrent 401s during token refresh
+let isRefreshing = false;
+let failedQueue: Array<{
+  resolve: (value?: any) => void;
+  reject: (reason?: any) => void;
+}> = [];
+
+const processQueue = (error: any = null) => {
+  failedQueue.forEach(prom => {
+    if (error) {
+      prom.reject(error);
+    } else {
+      prom.resolve();
+    }
+  });
+  
+  failedQueue = [];
+};
+
+// Response interceptor with proper refresh token queueing
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
-    // If 401, redirect to login (session expired)
-    if (error.response?.status === 401) {
-      window.location.href = '/login';
-      return Promise.reject(error);
+    const originalRequest = error.config;
+
+    // If 401 and not already retrying
+    if (error.response?.status === 401 && !originalRequest._retry) {
+      if (isRefreshing) {
+        // Already refreshing - queue this request
+        return new Promise((resolve, reject) => {
+          failedQueue.push({ resolve, reject });
+        })
+          .then(() => {
+            return api(originalRequest);
+          })
+          .catch((err) => {
+            return Promise.reject(err);
+          });
+      }
+
+      originalRequest._retry = true;
+      isRefreshing = true;
+
+      try {
+        // Try to refresh token via Remix action
+        // In Remix architecture, refresh should happen server-side
+        // This is a fallback - ideally use loader/action pattern
+        await fetch('/api/refresh-token', {
+          method: 'POST',
+          credentials: 'include',
+        });
+
+        processQueue(null);
+        return api(originalRequest);
+      } catch (refreshError) {
+        processQueue(refreshError);
+        // Session expired - redirect to login
+        window.location.href = '/login';
+        return Promise.reject(refreshError);
+      } finally {
+        isRefreshing = false;
+      }
     }
+
     return Promise.reject(error);
   }
 );

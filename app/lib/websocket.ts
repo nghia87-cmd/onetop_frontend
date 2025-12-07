@@ -20,16 +20,19 @@ class WebSocketService {
    * Connect to Django Channels WebSocket
    * @param token - JWT access token
    * @param conversationId - Chat conversation ID (optional for notifications only)
+   * 
+   * Security Note: Token is sent in URL during initial handshake.
+   * TODO: Implement ticket-based auth or send token via first message after connection
    */
   connect(token: string, conversationId?: string) {
     // Save credentials for reconnection
     this.currentToken = token;
     this.currentConversationId = conversationId || null;
 
-    // Django Channels URL format: ws://localhost:8000/ws/chat/{room_name}/?token={token}
+    // Django Channels WebSocket endpoint (token-less connection)
     const endpoint = conversationId 
-      ? `/ws/chat/${conversationId}/?token=${token}`
-      : `/ws/notifications/?token=${token}`;
+      ? `/ws/chat/${conversationId}/`
+      : `/ws/notifications/`;
     
     const url = `${WS_URL}${endpoint}`;
     
@@ -39,6 +42,14 @@ class WebSocketService {
       this.socket.onopen = () => {
         console.log('✅ WebSocket connected:', endpoint);
         this.reconnectAttempts = 0;
+        
+        // Send authentication token via first message (more secure than URL)
+        if (this.socket && this.currentToken) {
+          this.socket.send(JSON.stringify({
+            type: 'authenticate',
+            token: this.currentToken
+          }));
+        }
       };
 
       this.socket.onmessage = (event) => {
