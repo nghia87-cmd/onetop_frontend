@@ -4,6 +4,37 @@ import axios from 'axios';
 const API_URL = process.env.API_URL || 'http://localhost:8000/api/v1';
 
 /**
+ * Auth API (Server-side - no token needed for register/login)
+ */
+export const authAPI = {
+  register: async (data: {
+    email: string;
+    full_name: string;
+    password: string;
+    user_type: string;
+    phone_number?: string;
+  }) => {
+    const client = axios.create({
+      baseURL: API_URL,
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+    return client.post('/auth/register/', data);
+  },
+
+  login: async (email: string, password: string) => {
+    const client = axios.create({
+      baseURL: API_URL,
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+    return client.post('/auth/login/', { email, password });
+  },
+};
+
+/**
  * Create API client with authentication token
  */
 export function createAPIClient(accessToken: string) {

@@ -5,7 +5,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { Briefcase, Mail, Lock, AlertCircle } from "lucide-react";
-import { authAPI } from "~/lib/api";
+import { authAPI } from "~/lib/api.server";
 import { createUserSession, getOptionalUser } from "~/lib/session.server";
 
 export const meta: MetaFunction = () => {
