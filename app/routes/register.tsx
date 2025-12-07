@@ -205,12 +205,6 @@ export default function Register() {
               )}
             </div>
 
-            {/* Email & Username */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
-                  Email *
-                </label>
             {/* Email - Single column (Username removed, backend uses email) */}
             <div>
               <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
@@ -244,7 +238,13 @@ export default function Register() {
                     : actionData.fieldErrors.email}
                 </p>
               )}
-            </div>Họ và tên *
+            </div>
+
+            {/* Full Name & Phone */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label htmlFor="full_name" className="block text-sm font-medium text-gray-700 mb-2">
+                  Họ và tên *
                 </label>
                 <input
                   {...register("full_name")}
